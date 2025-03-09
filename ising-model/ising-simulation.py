@@ -45,6 +45,13 @@ def compute_energy_diff(state, a, b, coupling):
 
 
 def metropolis(state, temperature, n_steps, coupling, kB):
+    temperature = 1e-6 if temperature == 0 else temperature
+    acceptance_level = {
+        0: 1,
+        4: np.exp(-4 / kB / temperature),
+        8: np.exp(-8 / kB / temperature)
+    }
+    # Run the metropolis algorithm for n_steps steps
     for _ in range(n_steps):
         # Pick a random site in the lattice
         a = rng.integers(state.shape[0])
@@ -52,7 +59,7 @@ def metropolis(state, temperature, n_steps, coupling, kB):
         # Compute the energy difference
         delta_E = compute_energy_diff(state, a, b, coupling)
         # Metropolis acceptance criterion
-        if (delta_E < 0) or (rng.random() < np.exp(-delta_E / kB / temperature)):
+        if (delta_E < 0) or (rng.random() < acceptance_level[delta_E]):
             state[a, b] *= -1
     return state
 
@@ -94,7 +101,7 @@ def main():
     out_path = './out/'
     os.makedirs(out_path, exist_ok=True)
     sizes = [(L, L) for L in [5, 10, 15]]
-    temperatures = [1e-6, 1.0, 1.5, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 3.0]
+    temperatures = [0, 1.0, 1.5, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 3.0]
     n_therm = 100_000
     n_samples = 5_000
     coupling = 1.0
@@ -126,8 +133,9 @@ def main():
                                       n_therm, n_samples, n_subsweeps)
             magnetizations.append(m)
             energies.append(e)
-            chis.append(sdm / (temperature * size[0] * size[1]))
-            cvs.append(sde / (temperature**2 * size[0] * size[1]))
+            t = 1e-6 if temperature == 0 else temperature
+            chis.append(sdm / (t * size[0] * size[1]))
+            cvs.append(sde / (t**2 * size[0] * size[1]))
             print(
                 f'\tTemperature {temperature}: Magnetization={m:.4f}({sdm:.4f}), Energy={e:.4f}({sde:.4f})')
 
