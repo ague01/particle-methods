@@ -94,7 +94,7 @@ def main():
     out_path = './out/'
     os.makedirs(out_path, exist_ok=True)
     sizes = [(L, L) for L in [5, 10, 15]]
-    temperatures = [0.0, 1.0, 1.5, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 3.0]
+    temperatures = [1e-6, 1.0, 1.5, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 3.0]
     n_therm = 100_000
     n_samples = 5_000
     coupling = 1.0
@@ -108,7 +108,7 @@ def main():
     print(f'Thermalization Steps: {n_therm}')
     print(f'Number of Samples: {n_samples}')
     print('-'*30)
-
+    '''
     # a) determine the critical temperature
     # b) plot the magnetization as a function of temperature for different sizes
     fig, ax = plt.subplots(2, 2, sharex=True, figsize=(16, 10))
@@ -126,8 +126,8 @@ def main():
                                       n_therm, n_samples, n_subsweeps)
             magnetizations.append(m)
             energies.append(e)
-            chis.append(0 if temperature == 0 else sdm / (temperature * size[0] * size[1]))
-            cvs.append(0 if temperature == 0 else sde / (temperature**2 * size[0] * size[1]))
+            chis.append(sdm / (temperature * size[0] * size[1]))
+            cvs.append(sde / (temperature**2 * size[0] * size[1]))
             print(
                 f'\tTemperature {temperature}: Magnetization={m:.4f}({sdm:.4f}), Energy={e:.4f}({sde:.4f})')
 
@@ -162,19 +162,19 @@ def main():
     ax[1, 0].grid()
 
     ax[1, 1].set_xlabel('Temperature')
-    ax[1, 1].set_ylabel('Susceptibility $\chi$')
+    ax[1, 1].set_ylabel(r'Susceptibility $\chi$')
     ax[1, 1].set_title('Susceptibility vs Temperature')
     ax[1, 1].grid()
 
-    fig.legend()
+    fig.legend(loc='center right')
     plt.tight_layout()
     plt.savefig(out_path + f'magnetization_energy.png')
-
+    '''
     # c) plot the dependence of M on the simulation time for T < Tc, small size
     size = (5, 5)
     n_subsweeps = size[0] * size[1]
-    temperatures = [1.5, 2.0, 2.1, 2.2]
-    n_samples = 1_000
+    temperatures = [1.0, 1.5, 2.0, 2.1, 2.2]
+    n_samples = 5_000
     print('\n')
     print('Markov Chain Ising Model Simulation for c)')
     print('-'*30)
@@ -186,17 +186,23 @@ def main():
     print(f'Number of Subsweeps: {n_subsweeps}')
     print('-'*30)
 
-    # Tc for L=5 is 2.2 (based on capacity)
-
-    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-    for temperature in temperatures:
+    a = len(temperatures)//2 + 1
+    _, ax = plt.subplots(2, 1, figsize=(8, 12), sharex=True)
+    for temperature in temperatures[:a]:
         magnetizations, _ = simulate_raw(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps)
-        ax.plot(range(n_samples), magnetizations, '--', linewidth=1.0, label=f'T={temperature}')
-    ax.set_xlabel('Simulation Time')
-    ax.set_ylabel('Magnetization')
-    ax.set_title('Magnetization vs Simulation Time')
-    ax.grid()
-    ax.legend()
+        ax[0].plot(range(n_samples), magnetizations, '--', linewidth=1.0, label=f'T={temperature}')
+    for temperature in temperatures[a:]:
+        magnetizations, _ = simulate_raw(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps)
+        ax[1].plot(range(n_samples), magnetizations, '--', linewidth=1.0, label=f'T={temperature}')
+    ax[0].set_xlabel('Simulation Time')
+    ax[1].set_xlabel('Simulation Time')
+    ax[0].set_ylabel('Magnetization')
+    ax[1].set_ylabel('Magnetization')
+    ax[0].set_title('Magnetization vs Simulation Time')
+    ax[0].grid()
+    ax[1].grid()
+    ax[0].legend()
+    ax[1].legend()
     plt.tight_layout()
     plt.savefig(out_path + f'magnetization_time.png')
 
