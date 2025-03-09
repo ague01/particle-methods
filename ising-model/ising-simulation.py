@@ -47,7 +47,8 @@ def compute_energy_diff(state, a, b, coupling):
 def metropolis(state, temperature, n_steps, coupling, kB):
     for _ in range(n_steps):
         # Pick a random site in the lattice
-        a, b = (rng.random(size=2) * state.shape).astype(int)
+        a = rng.integers(state.shape[0])
+        b = rng.integers(state.shape[1])
         # Compute the energy difference
         delta_E = compute_energy_diff(state, a, b, coupling)
         # Metropolis acceptance criterion
@@ -56,7 +57,7 @@ def metropolis(state, temperature, n_steps, coupling, kB):
     return state
 
 
-def simulate(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps):
+def simulate_raw(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps):
     # Initialize the lattice with random spins
     state = random_initial_state(size)
     # Run the metropolis algorithm for n_therm steps
@@ -72,6 +73,13 @@ def simulate(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps):
         magnetizations.append(np.mean(state))
         # Measure the energy
         energies.append(compute_energy(state, coupling))
+
+    return magnetizations, energies
+
+
+def simulate(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps):
+    magnetizations, energies = simulate_raw(
+        size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps)
 
     # Compute quantities
     avg_mag = np.mean(np.abs(magnetizations))
@@ -92,7 +100,7 @@ def main():
     coupling = 1.0
     kB = 1.0
 
-    print('Markov Chain Ising Model Simulation')
+    print('Markov Chain Ising Model Simulation for a) and b)')
     print('-'*30)
     print(f'Sizes: {sizes}')
     print(f'Coupling: {coupling}')
@@ -104,7 +112,7 @@ def main():
     # a) determine the critical temperature
     # b) plot the magnetization as a function of temperature for different sizes
     fig, ax = plt.subplots(2, 2, sharex=True, figsize=(16, 10))
-    for size in sizes:
+    for i, size in enumerate(sizes):
         n_subsweeps = size[0] * size[1]
         print(f'Size: {size} (subsweeps={n_subsweeps})')
 
@@ -114,21 +122,30 @@ def main():
         chis = []
 
         for temperature in temperatures:
-            m, sdm, e, sde = simulate(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps)
+            m, sdm, e, sde = simulate(size, coupling, kB, temperature,
+                                      n_therm, n_samples, n_subsweeps)
             magnetizations.append(m)
             energies.append(e)
-            chis.append(sdm / (temperature * size[0] * size[1]))
-            cvs.append(sde / (temperature**2 * size[0] * size[1]))
-            print(f'\tTemperature {temperature}: Magnetization={m:.4f}({sdm:.4f}), Energy={e:.4f}({sde:.4f})')
+            chis.append(0 if temperature == 0 else sdm / (temperature * size[0] * size[1]))
+            cvs.append(0 if temperature == 0 else sde / (temperature**2 * size[0] * size[1]))
+            print(
+                f'\tTemperature {temperature}: Magnetization={m:.4f}({sdm:.4f}), Energy={e:.4f}({sde:.4f})')
 
         # Print the critical temperature
-        print(f'Critical Temperature for L={size[0]}: {temperatures[np.argmax(cvs)]}')
+        print(
+            f'Critical Temperature for L={size[0]} based on capacity: {temperatures[np.argmax(cvs)]}')
+        print(
+            f'Critical Temperature for L={size[0]} based on susceptibility: {temperatures[np.argmax(chis)]}')
 
-        # Plot the magnetization as a function of temperature for size = L
-        ax[0, 0].plot(temperatures, magnetizations, 'o-', label=f'L={size[0]}')
-        ax[0, 1].plot(temperatures, energies, 'o-', label=f'L={size[0]}')
-        ax[1, 0].plot(temperatures, cvs, 'o-', label=f'L={size[0]}')
-        ax[1, 1].plot(temperatures, chis, 'o-', label=f'L={size[0]}')
+        # Plot quantities as a function of temperature for size = L
+        col = ['tab:blue', 'tab:orange', 'tab:green']
+        ax[0, 0].plot(temperatures, magnetizations, 'o-', color=col[i], label=f'L={size[0]}')
+        ax[0, 1].plot(temperatures, energies, 'o-', color=col[i])
+        ax[1, 0].plot(temperatures, cvs, 'o-', color=col[i])
+        ax[1, 1].plot(temperatures, chis, 'o-', color=col[i])
+        # Plot critical temperatures
+        ax[1, 0].axvline(x=temperatures[np.argmax(cvs)], color=col[i], linestyle='dotted', label=f'$T_c$ L={size[0]}')
+        ax[1, 1].axvline(x=temperatures[np.argmax(chis)], color=col[i], linestyle='dotted')
 
     ax[0, 0].set_ylabel('Average Magnetization')
     ax[0, 0].set_title('Magnetization vs Temperature')
@@ -149,15 +166,39 @@ def main():
     ax[1, 1].set_title('Susceptibility vs Temperature')
     ax[1, 1].grid()
 
-    # Plot vertical lines at critical temperature
-    ax[0, 0].axvline(x=2.269, color='r', linestyle='--', label='$T_C$')
-    ax[0, 1].axvline(x=2.269, color='r', linestyle='--')
-    ax[1, 0].axvline(x=2.269, color='r', linestyle='--')
-    ax[1, 1].axvline(x=2.269, color='r', linestyle='--')
-
     fig.legend()
     plt.tight_layout()
     plt.savefig(out_path + f'magnetization_energy.png')
+
+    # c) plot the dependence of M on the simulation time for T < Tc, small size
+    size = (5, 5)
+    n_subsweeps = size[0] * size[1]
+    temperatures = [1.5, 2.0, 2.1, 2.2]
+    n_samples = 1_000
+    print('\n')
+    print('Markov Chain Ising Model Simulation for c)')
+    print('-'*30)
+    print(f'Size: {size}')
+    print(f'Coupling: {coupling}')
+    print(f'Temperatures: {temperatures}')
+    print(f'Thermalization Steps: {n_therm}')
+    print(f'Number of Samples: {n_samples}')
+    print(f'Number of Subsweeps: {n_subsweeps}')
+    print('-'*30)
+
+    # Tc for L=5 is 2.2 (based on capacity)
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    for temperature in temperatures:
+        magnetizations, _ = simulate_raw(size, coupling, kB, temperature, n_therm, n_samples, n_subsweeps)
+        ax.plot(range(n_samples), magnetizations, '--', linewidth=1.0, label=f'T={temperature}')
+    ax.set_xlabel('Simulation Time')
+    ax.set_ylabel('Magnetization')
+    ax.set_title('Magnetization vs Simulation Time')
+    ax.grid()
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(out_path + f'magnetization_time.png')
 
 
 if __name__ == '__main__':
