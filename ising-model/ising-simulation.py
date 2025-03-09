@@ -108,7 +108,7 @@ def main():
     print(f'Thermalization Steps: {n_therm}')
     print(f'Number of Samples: {n_samples}')
     print('-'*30)
-    '''
+
     # a) determine the critical temperature
     # b) plot the magnetization as a function of temperature for different sizes
     fig, ax = plt.subplots(2, 2, sharex=True, figsize=(16, 10))
@@ -169,7 +169,7 @@ def main():
     fig.legend(loc='center right')
     plt.tight_layout()
     plt.savefig(out_path + f'magnetization_energy.png')
-    '''
+
     # c) plot the dependence of M on the simulation time for T < Tc, small size
     size = (5, 5)
     n_subsweeps = size[0] * size[1]
