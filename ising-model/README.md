@@ -55,3 +55,30 @@ where:
 
 - $h_i = \sum_{\langle i,j \rangle} \sigma_j$: the sum of the four nearest neighbor spins around $i$
 - $J$: the coupling constant that describes the strength of interaction between neighboring spins
+
+## 2. Analysis of results
+
+> [!NOTE]
+> The temperature $T=0.0$ has been encoded in $T=1\cdot 10^{-6}$ to improve the numerical stability of the algorithm. However, for small lattices, i.e. $L=5$, it still gives unstable results.
+
+### a) Determine the critical temperature and b) Results varying the lattice size
+
+<figure>
+    <img src="./out/magnetization_energy.png"
+         alt="Plots in function of Temperature">
+    <figcaption>Figure1: Magnetization, Energy, Capacity, and Susceptibility in function of Temperature</figcaption>
+</figure>
+
+a) The critical temperature $T_c$ corresponds to the peak in the Heat Capacity $C_v$ or the Susceptibility $\chi$. In the two bottom plots the $T_c$ is highlighted by a vertical dotted line, accordingly colored. We can observe that the peaks are around the theoretical $T_c \approx 2.269$ for $L\rightarrow\infty$, however small deviations are due to the limited $L$ used in this study.
+
+b) Increasing the system size $L$ we observe a sharper drop in average magnetization around $T_c$ as expected getting closes to the ideal condition of $L\rightarrow\infty$. In contrast, with lower sizes we have the opposite behaviour. In the energy plot we have a symmetric behaviour as expected, starting from lower energies to higher ones. As the lattice size $L$ increases we have a sharper drop.
+
+### c) Sing-flips in average magnetization $M$
+
+<figure>
+    <img src="./out/magnetization_time.png"
+         alt="Plots in function of Time">
+    <figcaption> Figure 2: Average Magnetization, in function of the simulation time (with L=5000 and configuration of the remaining parameter as provided in the requirements.) </figcaption>
+</figure>
+
+Focusing on a single color at each time, we observe phase flips for values of temperature $T \ge 2$. The frequence of phase flips is observed to be increasing with the temperature vlaue.
