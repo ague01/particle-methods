@@ -10,7 +10,7 @@ E = H(\{\sigma\}) = -J \sum_{\langle i,j \rangle} \sigma_i \sigma_j
 
 where:
 
-- $\sigma_i \in {\plusmn 1}$ is the spin at site $i$
+- $\sigma_i \in {\pm 1}$ is the spin at site $i$
 - $J$ is the coupling constant
 - $\langle i, j \rangle$ means the sum runs over all pairs of nearest neighbors (up, down, left, right)
 
@@ -21,8 +21,6 @@ The energy difference:
 ```
 
 where $E(Y)$ is the energy of the system after flipping a single spin $\sigma_i$ to $-\sigma_i$, can be derived as follows.
-
----
 
 The contribution to the total energy from spin $\sigma_i$ interacting with its neighbors $\sigma_j$ is:
 
@@ -66,8 +64,9 @@ where:
 <figure>
     <img src="./out/magnetization_energy.png"
          alt="Plots in function of Temperature">
-    <figcaption>Figure1: Magnetization, Energy, Capacity, and Susceptibility in function of Temperature</figcaption>
+    <figcaption><em>Figure 1: Magnetization, Energy, Capacity, and Susceptibility in function of Temperature</em></figcaption>
 </figure>
+
 
 a) The critical temperature $T_c$ corresponds to the peak in the Heat Capacity $C_v$ or the Susceptibility $\chi$. In the two bottom plots the $T_c$ is highlighted by a vertical dotted line, accordingly colored. We can observe that the peaks are around the theoretical $T_c \approx 2.269$ for $L\rightarrow\infty$, however small deviations are due to the limited $L$ used in this study.
 
@@ -78,7 +77,7 @@ b) Increasing the system size $L$ we observe a sharper drop in average magnetiza
 <figure>
     <img src="./out/magnetization_time.png"
          alt="Plots in function of Time">
-    <figcaption> Figure 2: Average Magnetization, in function of the simulation time (with L=5000 and configuration of the remaining parameter as provided in the requirements.) </figcaption>
+    <figcaption><em> Figure 2: Average Magnetization, in function of the simulation time (with L=5000 and configuration of the remaining parameter as provided in the requirements.) </em></figcaption>
 </figure>
 
-Focusing on a single color at each time, we observe phase flips for values of temperature $T \ge 2$. The frequence of phase flips is observed to be increasing with the temperature vlaue.
+Focusing on a single plot at a time in Figure 2, we observe phase flips for values of temperature $T \ge 2$. The frequence of phase flips is observed to be increasing with the temperature value.
