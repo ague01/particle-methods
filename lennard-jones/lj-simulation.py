@@ -21,7 +21,7 @@ class Particle:
     _r_cutoff: float = -1.
     _mass: float = -1.
 
-    def __init__(self, position: np.ndarray, velocity: np.ndarray, r_cutoff: float, mass: float, dt: float):
+    def __init__(self, position: np.ndarray, velocity: np.ndarray, r_cutoff: float, mass: float):
         """Initialize a particle."""
         if Particle._r_cutoff < 0:
             Particle._r_cutoff = r_cutoff
@@ -30,18 +30,26 @@ class Particle:
 
         self.position: np.ndarray = position
         self.velocity: np.ndarray = velocity
-        self.previous_position: np.ndarray = position - velocity * dt
         self.force = np.zeros_like(position)
 
     def update_position(self, dt: float, environment: 'Environment'):
-        """Update the position of the particle using the current velocity."""
-        self.position += self.velocity * dt
-        # Apply periodic boundary conditions
+        """Update the particle position based on the velocity Verlet algorithm."""
+        acceleration = self.force / Particle._mass
+        self.position += self.velocity * dt + 0.5 * acceleration * dt ** 2
         self.position %= environment.env_size
+
+    def update_force_velocity(self, dt: float, environment: 'Environment'):
+        """Update the particle force and the velocity based on the velocity Verlet algorithm."""
+        old_force = self.force
+        # Update force using the current position (already updated)
+        self.update_force(environment)
+        # Update velocity
+        self.velocity += 0.5 * (old_force + self.force) / Particle._mass * dt
 
     def update_force(self, environment: 'Environment'):
         """Update the force on the particle."""
-        self.force = self.force * 1
+        # Reset force
+        self.force = np.zeros_like(self.force)
 
 
 class Environment:
@@ -52,7 +60,7 @@ class Environment:
         self.n_cells = int(env_size / cell_size_lb)
         self.cell_size = env_size / self.n_cells
 
-        # Initialize the cell linked list
+        # Initialize the cell-list structure
         self.cells = {(i, j): [] for i in range(self.n_cells) for j in range(self.n_cells)}
 
     def add_particle(self, particle: Particle):
@@ -91,8 +99,48 @@ class Environment:
                 total_momentum += particle._mass * particle.velocity
         return total_momentum
 
+    def plot_particles(self, file_id: str = ''):
+        """Plot the particles in the environment."""
+        # Extract positions and velocities from particles
+        positions = []
+        velocities = []
+        for cell in self.cells.values():
+            for particle in cell:
+                positions.append(particle.position)
+                velocities.append(particle.velocity)
+        positions = np.array(positions)
+        velocities = np.array(velocities)
 
-def initialize(n_particles: int, domain_size: float, n_dims: int, T: float, mass: float, r_cutoff: float, dt: float) -> Environment:
+        # Plot initial positions and velocities
+        fig, ax = plt.subplots()
+        ax.quiver(
+            positions[:, 0],
+            positions[:, 1],
+            velocities[:, 0],
+            velocities[:, 1],
+            angles='xy', scale_units='xy', scale=1)
+        ax.set_xlim(0, self.env_size)
+        ax.set_ylim(0, self.env_size)
+        ax.set_aspect('equal')
+        ax.set_title(f'Positions and Velocities ({file_id})')
+        ax.set_xlabel('X Position')
+        ax.set_ylabel('Y Position')
+        plt.savefig(f'./out/{file_id}_positions_velocities.png')
+        plt.close(fig)
+
+        # Plot the distribution of velocities
+        fig, ax = plt.subplots()
+        ax.hist(np.linalg.norm(velocities, axis=1), bins=30, density=True)
+        ax.set_title(f'Velocity Distribution ({file_id})')
+        ax.set_xlabel('Velocity')
+        ax.set_ylabel('Density')
+        plt.savefig(f'./out/{file_id}_velocity_dist.png')
+        plt.close(fig)
+
+
+def initialize(
+        n_particles: int, domain_size: float, n_dims: int, T: float, mass: float, r_cutoff: float,
+        dt: float) -> Environment:
     """Initialize the simulation with random particles."""
     # Randomly initialize positions within the domain
     positions = rng.uniform(0, domain_size, size=(n_particles, n_dims))
@@ -106,54 +154,38 @@ def initialize(n_particles: int, domain_size: float, n_dims: int, T: float, mass
     # Create the environment and add particles
     env = Environment(env_size=domain_size, cell_size_lb=r_cutoff)
     for i in range(n_particles):
-        particle = Particle(positions[i], velocities[i], r_cutoff, mass, dt)
+        particle = Particle(positions[i], velocities[i], r_cutoff, mass)
         env.add_particle(particle)
 
-    # Plot initial positions and velocities
-    fig, ax = plt.subplots()
-    ax.quiver(
-        positions[:, 0],
-        positions[:, 1],
-        velocities[:, 0],
-        velocities[:, 1],
-        angles='xy', scale_units='xy', scale=1)
-    ax.set_xlim(0, domain_size)
-    ax.set_ylim(0, domain_size)
-    ax.set_aspect('equal')
-    ax.set_title('Initial Positions and Velocities')
-    ax.set_xlabel('X Position')
-    ax.set_ylabel('Y Position')
-    plt.savefig('./out/init_positions_velocities.png')
-    plt.close(fig)
-
-    # Plot the distribution of velocities
-    fig, ax = plt.subplots()
-    ax.hist(np.linalg.norm(velocities, axis=1), bins=30, density=True)
-    ax.set_title('Velocity Distribution')
-    ax.set_xlabel('Velocity')
-    ax.set_ylabel('Density')
-    plt.savefig('./out/init_velocity_dist.png')
-    plt.close(fig)
+    # Update the particle forces based on their initial positions
+    for cell in env.cells.values():
+        for particle in cell:
+            particle.update_force(env)
 
     return env
 
-def simulate(env: Environment, dt: float, max_time: int):
+
+def simulate(env: Environment, dt: float, max_time: float):
     t = 0
     while t < max_time:
-        # Update particle positions
+        # Update particle positions and velocities
         for cell in env.cells.values():
             for particle in cell:
                 particle.update_position(dt, env)
+        # Update cell list
+        for idx, cell in env.cells.items():
+            for particle in cell:
+                new_cell_idx = env.get_cell_idx(particle.position)
+                if new_cell_idx != idx:
+                    # Remove from old cell
+                    env.cells[idx].remove(particle)
+                    # Add to new cell
+                    env.cells[new_cell_idx].append(particle)
 
         # Update forces
         for cell in env.cells.values():
             for particle in cell:
                 particle.update_force(env)
-
-        # Update velocities based on forces
-        for cell in env.cells.values():
-            for particle in cell:
-                particle.velocity += particle.force * dt / Particle._mass
 
         # Increment time
         t += dt
@@ -164,20 +196,24 @@ def main():
     domain_size = 10.
 
     n_particles = 500
-
     mass = 1.
     T = 0.5
     r_cutoff = 2.5
 
-    max_time = 100
+    max_time = 10.
     dt = 0.01
 
     # Initialize the environment and particles
     env = initialize(n_particles, domain_size, n_dims, T, mass, r_cutoff, dt)
+    env.plot_particles(file_id='initial')
     print('Simulation initialized.')
-    print('Total momentum:', env.compute_total_momentum())
-    #simulate(env, dt, max_time)
+    print('Initial total momentum:', env.compute_total_momentum())
 
+    # Simulate the environment
+    simulate(env, dt, max_time)
+    env.plot_particles(file_id='final')
+    print('Simulation completed.')
+    print('Final total momentum:', env.compute_total_momentum())
 
 
 if __name__ == '__main__':
