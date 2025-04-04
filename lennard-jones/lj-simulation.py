@@ -18,19 +18,19 @@ mpl.use('Agg')
 class Particle:
     """Class representing a particle in the simulation."""
 
-    _r_cutoff: float = -1.
+    _sq_r_cutoff: float = -1.
     _mass: float = -1.
 
     def __init__(self, position: np.ndarray, velocity: np.ndarray, r_cutoff: float, mass: float):
         """Initialize a particle."""
-        if Particle._r_cutoff < 0:
-            Particle._r_cutoff = r_cutoff
+        if Particle._sq_r_cutoff < 0:
+            Particle._sq_r_cutoff = r_cutoff ** 2
         if Particle._mass < 0:
             Particle._mass = mass
 
         self.position: np.ndarray = position
         self.velocity: np.ndarray = velocity
-        self.force = np.zeros_like(position)
+        self.force: np.ndarray = np.zeros_like(position)
 
     def update_position(self, dt: float, environment: 'Environment'):
         """Update the particle position based on the velocity Verlet algorithm."""
@@ -40,7 +40,7 @@ class Particle:
 
     def update_force_velocity(self, dt: float, environment: 'Environment'):
         """Update the particle force and the velocity based on the velocity Verlet algorithm."""
-        old_force = self.force
+        old_force : np.ndarray = self.force.copy()
         # Update force using the current position (already updated)
         self.update_force(environment)
         # Update velocity
@@ -48,9 +48,38 @@ class Particle:
 
     def update_force(self, environment: 'Environment'):
         """Update the force on the particle."""
-        # Reset force
-        self.force = np.zeros_like(self.force)
+        self.force = self.compute(environment, quantity='force') # type: ignore
 
+    def compute(self, environment: 'Environment', quantity: str, n_particles: int = -1) -> float | np.ndarray:
+        """Compute a quantity for the particle. ('force' or 'potential')"""
+        if quantity == 'force':
+            # Compute the force on the particle by another particle without the 48 factor
+            def func(pos, r2, r6): return pos / r2 / r6 * (1/r6 - 0.5)
+        elif quantity == 'potential':
+            if n_particles < 0:
+                raise ValueError("Number of particles must be provided for potential energy calculation.")
+            # Compute the potential energy of the particle by another particle
+            def func(pos, r2, r6): return 1 / r6 * (1/r6 - 1)
+        else:
+            raise ValueError(f"Unknown quantity: {quantity}")
+
+        ret = 0.0
+        # Compute quantity from other particles in the same cell and neighbouring cells
+        for neighbour_cell in environment.get_neighbour_cells(self.position):
+            for particle in environment.cells[neighbour_cell]:
+                r2 = environment.periodic_squared_distance(self.position, particle.position)
+                if r2 < Particle._sq_r_cutoff and r2 > 0:
+                    # Compute the squared distance between particles
+                    ret += func(self.position, r2, r2 ** 3)
+
+        # Add factors
+        if quantity == 'force':
+            ret *= 48
+        elif quantity == 'potential':
+            ecut = func(self.position, Particle._sq_r_cutoff, Particle._sq_r_cutoff ** 3)
+            ret -= ecut * n_particles
+
+        return ret
 
 class Environment:
     def __init__(self, env_size: float = 10, cell_size_lb: float = 0.5):
@@ -81,11 +110,11 @@ class Environment:
             for dy in [-1, 0, 1]
         ]
 
-    def periodic_distance(self, pos1, pos2):
-        """Compute the periodic distance between two positions."""
+    def periodic_squared_distance(self, pos1, pos2):
+        """Compute the periodic squared distance between two positions."""
         delta = np.abs(pos1 - pos2)
         delta = np.where(delta > self.env_size / 2, self.env_size - delta, delta)
-        return np.sum(np.square(delta)) ** 0.5
+        return np.sum(np.square(delta))
 
     def periodic_position(self, pos):
         """Compute the true position in the periodic domain given a position."""
@@ -98,6 +127,21 @@ class Environment:
             for particle in cell:
                 total_momentum += particle._mass * particle.velocity
         return total_momentum
+
+    def compute_total_energies(self) -> tuple[float, float]:
+        """Compute the total kinetic and potential energy of the system."""
+        t_kinetic_energy = 0.0
+        t_potential_energy = 0.0
+        for cell in self.cells.values():
+            for particle in cell:
+                # Kinetic energy
+                t_kinetic_energy += np.sum(np.square(particle.velocity))
+                # Potential energy (from acceleration)
+                t_potential_energy += np.sum(np.square(particle.force)) / 2
+
+        t_kinetic_energy *= 0.5 * Particle._mass
+
+        return t_kinetic_energy, t_potential_energy
 
     def plot_particles(self, file_id: str = ''):
         """Plot the particles in the environment."""
@@ -168,6 +212,8 @@ def initialize(
 def simulate(env: Environment, dt: float, max_time: float):
     t = 0
     while t < max_time:
+        if t % 0.1 < dt:
+            print(f'Starting simulation step n={t/dt:.0f} at time t={t:.2f}')
         # Update particle positions and velocities
         for cell in env.cells.values():
             for particle in cell:
@@ -195,12 +241,12 @@ def main():
     n_dims = 2
     domain_size = 10.
 
-    n_particles = 500
+    n_particles = 200
     mass = 1.
     T = 0.5
     r_cutoff = 2.5
 
-    max_time = 10.
+    max_time = 1.
     dt = 0.01
 
     # Initialize the environment and particles
