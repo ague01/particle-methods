@@ -144,7 +144,7 @@ class Environment:
                 # Compute same cell interactions
                 for particle2 in cell1[i_particle+1:]:
                     r2 = self.periodic_squared_distance(particle2.position, particle1.position)
-                    if r2 <= Particle._sq_r_cutoff and r2 > 1e-2:
+                    if r2 <= Particle._sq_r_cutoff and r2 > 1e-16:
                         # b) Potential energy
                         t_potential_energy += func_pot(r2 ** 3) - ecut
                         # c) Force
