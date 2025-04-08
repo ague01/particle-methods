@@ -89,6 +89,7 @@ class Environment:
         """Compute the periodic squared distance between two positions."""
         delta = np.abs(pos1 - pos2)
         delta = np.where(delta > self.env_size / 2, self.env_size - delta, delta)
+
         return np.sum(np.square(delta))
 
     def periodic_position(self, pos) -> np.ndarray:
@@ -130,46 +131,47 @@ class Environment:
         t_kinetic_energy = 0.
         t_potential_energy = 0.
 
-        def func_pot(r6): return 1. / r6 * (1./r6 - 1.)
+        for cell in self.cells:
+            for particle in cell:
+                assert np.all(particle.force == 0), "Particle force should be initialized to zero."
+
+        def func_pot(r6): return 4. / r6 * (1./r6 - 1.)
         ecut = func_pot(Particle._sq_r_cutoff ** 3)
 
-        def func_for(dis, r2, r6): return dis / r2 / r6 * (1./r6 - 0.5)
+        def func_for(r2, r6): return 48. / r2 / r6 * (1./r6 - 0.5)
 
         for i_cell, cell1 in enumerate(self.cells):
             # Compute same particle quantities
             for i_particle, particle1 in enumerate(cell1):
                 # a) Particle Kinetic energy
-                t_kinetic_energy += np.sum(np.square(particle1.velocity))
+                t_kinetic_energy += 0.5 * Particle._mass * np.sum(np.square(particle1.velocity))
 
                 # Compute same cell interactions
                 for particle2 in cell1[i_particle+1:]:
-                    r2 = self.periodic_squared_distance(particle2.position, particle1.position)
+                    r2 = self.periodic_squared_distance(particle1.position, particle2.position)
                     if r2 <= Particle._sq_r_cutoff and r2 > 1e-16:
                         # b) Potential energy
-                        t_potential_energy += func_pot(r2 ** 3) - ecut
+                        t_potential_energy += (func_pot(r2 ** 3) - ecut)
                         # c) Force
-                        delta_r = self.periodic_displacement(particle2.position, particle1.position)
-                        ff = 48 * func_for(delta_r, r2, r2 ** 3)
+                        delta_r = self.periodic_displacement(particle1.position, particle2.position)
+                        ff = func_for(r2, r2 ** 3) * delta_r
                         particle1.force += ff
                         particle2.force -= ff
 
-                # Compute neighbouring cell interactions
+                #Compute neighbouring cell interactions
                 for idx_cell2 in self.get_neighbour_cells(i_cell):
                     for particle2 in self.cells[idx_cell2]:
                         assert particle2 is not particle1
-                        r2 = self.periodic_squared_distance(particle2.position, particle1.position)
+                        r2 = self.periodic_squared_distance(particle1.position, particle2.position)
                         if r2 <= Particle._sq_r_cutoff and r2 > 1e-16:
                             # b) Potential energy
-                            t_potential_energy += func_pot(r2 ** 3) - ecut
+                            t_potential_energy += (func_pot(r2 ** 3) - ecut)
                             # c) Force
                             delta_r = self.periodic_displacement(
-                                particle2.position, particle1.position)
-                            ff = 48 * func_for(delta_r, r2, r2 ** 3)
+                                particle1.position, particle2.position)
+                            ff = func_for(r2, r2 ** 3) * delta_r
                             particle1.force += ff
                             particle2.force -= ff
-
-        t_kinetic_energy *= 0.5 * Particle._mass
-        t_potential_energy *= 4  # Factors 4 in the LJ potential formula
 
         return t_kinetic_energy, t_potential_energy
 
@@ -211,8 +213,8 @@ class Environment:
         plt.savefig(f'./out/{file_id}_velocity_dist.png')
         plt.close(fig)
 
-    def plot_force_energies(self, file_id: str = ''):
-        """Plot the forces and energies distributions of the particles."""
+    def plot_forces(self, file_id: str = ''):
+        """Plot the force distribution of the particles."""
         # Extract forces and energies from particles
         forces = []
         for cell in self.cells:
@@ -228,14 +230,8 @@ class Environment:
         ax.set_ylabel('Density')
         plt.savefig(f'./out/{file_id}_force_dist.png')
         plt.close(fig)
-        # Plot the distribution of potential energies
+        # Plot the distribution of momentum
         fig, ax = plt.subplots()
-        ax.hist(np.linalg.norm(forces, axis=1), bins=30, density=True)
-        ax.set_title(f'Potential Energy Distribution ({file_id})')
-        ax.set_xlabel('Potential Energy')
-        ax.set_ylabel('Density')
-        plt.savefig(f'./out/{file_id}_potential_energy_dist.png')
-        plt.close(fig)
 
 
 def initialize(
@@ -315,20 +311,20 @@ def simulate(env: Environment, dt: float, max_time: float) -> tuple[list, list]:
 
 def main():
     n_dims = 2
-    domain_size = 30.
+    domain_size = 2.5
 
-    n_particles = 100
+    n_particles = 4
     mass = 1.
     T = 0.8
     r_cutoff = 2.5
 
-    max_time = 2.
+    max_time = 0.1
     dt = 0.01
 
     # Initialize the environment and particles
     env = initialize(n_particles, domain_size, n_dims, T, mass, r_cutoff, dt)
     env.plot_particles(file_id='initial')
-    env.plot_force_energies(file_id='initial')
+    env.plot_forces(file_id='initial')
     # Store the total momentum and energies
     initial_momentum = env.compute_total_momentum()
 
