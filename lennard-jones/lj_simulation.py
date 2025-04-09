@@ -490,13 +490,13 @@ def main_task_b():
     ax1.set_xlabel('Time')
     ax1.set_ylabel('Kinetic Energy', color='tab:blue')
     ax1.set_yscale('log')
-    ax1.plot(np.arange(len(t_kin)) * dt, t_kin, label='Kinetic Energy', color='tab:blue')
+    ax1.plot(np.arange(len(t_kin)) * dt, t_kin, label='Kinetic Energy', color='tab:blue') # type: ignore
     ax1.tick_params(axis='y', labelcolor='tab:blue')
     ax1.grid(True, which='both')
     ax2 = ax1.twinx()  # Create a second y-axis sharing the same x-axis
     ax2.set_ylabel('Potential Energy', color='tab:orange')
     ax2.set_yscale('log')
-    ax2.plot(np.arange(len(t_pot)) * dt, t_pot, label='Potential Energy', color='tab:orange')
+    ax2.plot(np.arange(len(t_pot)) * dt, t_pot, label='Potential Energy', color='tab:orange') # type: ignore
     ax2.tick_params(axis='y', labelcolor='tab:orange')
     fig.tight_layout()  # Adjust layout to prevent overlap
     plt.savefig('./out/kinetic_potential_energy_term.png')
