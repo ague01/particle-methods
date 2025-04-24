@@ -1,4 +1,4 @@
-from ast import main
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -31,22 +31,46 @@ class DPD:
         return delta
 
     def compute_forces(self):
+        a = 25.
+        gamma = 4.5
+        sigma = 1.
+        isqrt_dt = 1. / np.sqrt(self.dt)
         # Reset forces to zero
         self.F.fill(0)
         # Compute pairwise forces
         for i in range(self.num_particles):
             for j in range(i + 1, self.num_particles):
                 # Calculate distance vector
-                r_ij = self.X[i] - self.X[j]
-                # Apply periodic boundary conditions
-                r_ij -= np.round(r_ij / self.box_size) * self.box_size
-                r2 = np.dot(r_ij, r_ij)
+                r = self.periodic_displacement(self.X[i], self.X[j])
+                r2 = np.dot(r, r)  # Distance squared norm
                 if r2 < 1.0:
-                    # Calculate force based on distance
-                    f = (1 - np.sqrt(r2)) * r_ij / r2
-                    self.F[i] += f
-                    self.F[j] -= f
-        pass
+                    rn = np.sqrt(r2)  # Distance norm
+                    ru = r / rn  # Unit vector
+
+                    # Calculate F_C
+                    fc = a * (1 - rn) * ru
+
+                    # Calculate F_R
+                    wr = 1 - rn
+                    xi = rng.normal()
+                    fr = sigma * wr * xi * isqrt_dt * ru
+
+                    # Calculate F_D
+                    wd = wr ** 2
+                    fd = - gamma * wd * np.dot(ru, self.V[i] - self.V[j]) * ru
+
+                    # Update forces
+                    self.F[i] += fc + fd + fr
+                    self.F[j] -= fc + fd + fr
+
+    def compute_total_momentum(self):
+        # Compute the total momentum of the system
+        return np.sum(self.V, axis=0)
+
+    def compute_temperature(self):
+        """Return the temperature of the system."""
+
+        return np.mean(self.V ** 2)
 
     def verlet_step(self):
         # Update positions and enforce periodic boundary conditions
@@ -68,23 +92,37 @@ class DPD:
     def run_simulation(self, num_steps):
         for step in range(num_steps):
             self.verlet_step()
-            if step % 100 == 0:
-                print(f"Step {step}/{num_steps} completed.")
+            if step % 10 == 0:
+                print(f'Temperature: {self.compute_temperature()}', end='\r')
+                #print(f'Step {step}/{num_steps} completed.', end='\r')
 
 
-def main():
-    density = 4
-    box_size = 15.0
-    num_particles = density * box_size ** 2
+def step_a(out_path):
+    density = 4.0
+    box_size = 5.0 #TODO: change to 15
+    num_particles = int(density * box_size ** 2)
     time_step = 0.01
-    num_steps = 1000
+    max_time = 10.0
+    num_steps = int(max_time / time_step)
 
     dpd_simulation = DPD(num_particles, box_size, time_step)
+    print(f'Initial momentum: {dpd_simulation.compute_total_momentum()}')
+    print(f'Initial temperature: {dpd_simulation.compute_temperature()}')
+
     start_time = time.time()
     dpd_simulation.run_simulation(num_steps)
     end_time = time.time()
 
     print(f"Simulation completed in {end_time - start_time:.2f} seconds.")
+    print(f'Final momentum: {dpd_simulation.compute_total_momentum()}')
+    print(f'Final temperature: {dpd_simulation.compute_temperature()}')
+
+def main():
+    # Create output directory
+    out_path = './out/'
+    os.makedirs(out_path, exist_ok=True)
+
+    step_a(out_path)
 
 
 if __name__ == "__main__":
