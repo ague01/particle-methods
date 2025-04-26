@@ -4,7 +4,7 @@ import numpy as np
 import time
 
 # Initialize the Marsenne Twister random number generator
-seed = 65647437888080846208636358821643839626
+seed = 65647437888080846208636358821641809626
 rng = np.random.default_rng(np.random.MT19937(seed))
 
 # Define the particle types constants
@@ -22,6 +22,7 @@ class DPD:
         time_step,
         types: np.ndarray,
         coeffs: list[list[float]],
+        positions: np.ndarray | None = None,
         bonds: list[tuple[int, int]] | None = None,
         K=None,
         rs=None,
@@ -39,7 +40,11 @@ class DPD:
         self.walls = walls
 
         # Initialize random positions
-        self.X: np.ndarray = rng.random(size=(num_particles, 2)) * box_size
+        if positions is not None:
+            assert positions.shape == (num_particles, 2), "Positions must be a 2D array of shape (num_particles, 2)."
+            self.X: np.ndarray = positions
+        else:
+            self.X: np.ndarray = rng.random(size=(num_particles, 2)) * box_size
         # Initialize 0 velocities and forces
         self.V: np.ndarray = np.zeros((num_particles, 2))
         self.F: np.ndarray = np.zeros((num_particles, 2))
@@ -50,9 +55,20 @@ class DPD:
 
         # Initialize walls
         if walls == 'courette':
-            # Set type of fluid particles to wall if they are in wall area, i.e. x<1, x>14, should be P_W
             for i in range(num_particles):
-                if  self.types[i] == P_F and (self.X[i, 0] < 1. or self.X[i, 0] > 14.):
+                if self.types[i] == P_F and (self.X[i, 0] < 1. or self.X[i, 0] > 14.):
+                    # Set type of fluid particles to wall if they are in wall area, i.e. x<1, x>14, should be P_W
+                    self.types[i] = P_W
+                    # Set velocity of wall particles to 5 in opposite direction
+                    if self.X[i, 0] < 1.:
+                        self.V[i, 1] = 5.
+                    elif self.X[i, 0] > 14.:
+                        self.V[i, 1] = -5.
+
+        elif walls == 'poiseuille':
+            for i in range(num_particles):
+                if self.types[i] == P_F and (self.X[i, 0] < 1. or self.X[i, 0] > 14.):
+                    # Set type of fluid particles to wall if they are in wall area, i.e. x<1, x>14, should be P_W
                     self.types[i] = P_W
 
     def periodic_displacement(self, pos1, pos2) -> np.ndarray:
@@ -146,37 +162,53 @@ class DPD:
 
     def verlet_step(self):
         """Perform a single Verlet step."""
-        # Update positions and enforce periodic boundary conditions
-        self.X += self.dt * self.V + 0.5 * (self.dt ** 2) * self.F
+        # Masks for wall and other particles
+        mask_walls = (self.types == P_W)
+        mask_other = ~mask_walls
+
+        # Update positions
+        self.X[mask_other] += self.dt * self.V[mask_other] + \
+            0.5 * (self.dt ** 2) * self.F[mask_other]
+        if self.walls == 'courette':
+            # Update positions of wall particles at constant velocity
+            self.X[mask_walls] += self.dt * self.V[mask_walls]
+
+        # Apply periodic boundary conditions
         self.X %= self.box_size
 
-        # Update velocities
+        # Update velocities (not for walls)
         V_old = self.V.copy()
-        self.V += 0.5 * self.dt * self.F
+        self.V[mask_other] += 0.5 * self.dt * self.F[mask_other]
 
         # Update forces (V and X are updated to dt+1)
         F_old = self.F.copy()
         self.compute_forces()
+        # Add constant force to non-wall particles
+        if self.walls == 'poiseuille':
+            self.F[mask_other] += np.array([0, 0.3]).reshape(1, 2)
 
-        # Update velocities again
-        self.V = V_old + 0.5 * self.dt * (F_old + self.F)
+        # Update velocities again only for non-wall particles
+        self.V[mask_other] = V_old[mask_other] + 0.5 * \
+            self.dt * (F_old[mask_other] + self.F[mask_other])
 
-    def run_simulation(self, num_steps, save_which=None, save_to=None):
-        """Run the simulation for a given number of steps. Save to file snapshots of which particles.
+    def run_simulation(self, num_steps, save_to=None):
+        """Run the simulation for a given number of steps. Save to file snapshots of all non-fluid particles, and some fluid particles.
 
         Parameters
         ----------
         num_steps : int
             Number of steps to run the simulation.
-        save_which : list[int] | None (default: None)
-            List of indices of particles to save to file. If None, no data is saved.
         save_to : str | None (default: None)
             Path to the file where the data will be saved. If None, no data is saved.
         """
 
-        if save_to or save_which:
-            assert save_which is not None, "save_which must be provided if save_to is specified."
+        if save_to:
             assert save_to is not None, "save_to must be provided if save_which is specified."
+
+            # Append all non fluid particles to save_which
+            save_which = np.where(self.types != P_F)[0]
+            # Add also some fluid particles to save_which
+            save_which = np.concatenate((save_which, np.where(self.types == P_F)[0][:150]))
 
             # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(save_to), exist_ok=True)
@@ -303,7 +335,68 @@ def step_b(out_path):
 
     dpd_simulation.run_simulation(
         num_steps,
-        save_which=range(num_chains * 7),
+        save_to=out_file
+    )
+
+    print('Final momentum:', dpd_simulation.compute_total_momentum())
+    print('Final temperature:', dpd_simulation.compute_temperature())
+
+
+def step_c(out_path):
+    """Study the motion of particles in Poiseuille flow with ring molecules of only type A particles."""
+    density = 4.0
+    box_size = 15.0
+    num_rings = 10
+    num_particles = int(density * box_size ** 2) + num_rings * 9
+
+    # Initialize bonds and types with chain molecules
+    bonds = []
+    types = np.zeros(num_particles, dtype=int)
+    positions = []
+
+    for i in range(num_rings):
+        for j in range(8):
+            bonds.append((i * 9 + j, i * 9 + (j + 1)))
+            types[i * 9 + j] = P_A
+        # Last type to close the ring
+        bonds.append((i * 9 + 8, i * 9 + 0))
+        types[i * 9 + 8] = P_A
+
+        # Set initial random position for ring
+        p = rng.random(2) * (box_size-2) + 1
+        for _ in range(9):
+            # Add random noise around the ring position
+            positions.append(p + rng.random(2) * 0.3 - 0.15)
+
+    # Convert list of positions to numpy array
+    pos = np.array(positions).reshape(num_rings * 9, 2)
+    # Add random position for the rest of the particles
+    pos = np.concatenate((pos, rng.random(size=(num_particles - num_rings * 9, 2)) * box_size))
+
+    time_step = 0.01
+    max_time = 75.0
+    num_steps = int(max_time / time_step)
+
+    K = 100.
+    rs = 0.3
+
+    coeffs = [
+        [50., 25., 25., 200.],
+        [25., 1., 300., 200.],
+        [25., 300., 25., 200.],
+        [200., 200., 200., 0.]
+    ]
+
+    out_file = os.path.join(out_path, 'c_poiseouille_flow.csv')
+
+    dpd_simulation = DPD(num_particles, box_size, time_step, types=types,
+                         positions=pos, coeffs=coeffs, bonds=bonds, K=K, rs=rs, walls='poiseuille')
+
+    print('Initial momentum:', dpd_simulation.compute_total_momentum())
+    print('Initial temperature:', dpd_simulation.compute_temperature())
+
+    dpd_simulation.run_simulation(
+        num_steps,
         save_to=out_file
     )
 
@@ -318,7 +411,8 @@ def main():
 
     # step_a(out_path)
     # step_test(out_path)
-    step_b(out_path)
+    # step_b(out_path)
+    step_c(out_path)
 
 
 if __name__ == "__main__":

@@ -35,8 +35,7 @@ def plot_csv(file_path, file_name):
             plt.ylabel(r'Equilibrium Temperature $k_BT$')
             plt.title('Temperature vs Step Size')
 
-        elif file_name.lower() == "b_courette_flow.csv":
-
+        elif file_name.lower() in ("b_courette_flow.csv", "c_poiseouille_flow.csv"):
             animate(data, file_name, file_path)
 
         plt.legend()
@@ -56,8 +55,9 @@ def plot_csv(file_path, file_name):
 def animate(df, file_name, file_path):
     import matplotlib.animation as animation
     from matplotlib.patches import Rectangle
+    from matplotlib.lines import Line2D
 
-    fps = 20
+    fps = 10 if file_name.lower() == "b_courette_flow.csv" else 20
     marker_size = 20
     output_video = os.path.join(os.path.dirname(file_path), 'plots',
                                 f"{os.path.splitext(file_name)[0]}.mp4")
@@ -68,7 +68,7 @@ def animate(df, file_name, file_path):
     particle_colors = {
         0: 'tab:blue',
         1: 'tab:orange',
-        2: 'tab:green',
+        2: 'tab:pink',
         3: 'tab:red'
     }
 
@@ -89,6 +89,20 @@ def animate(df, file_name, file_path):
     ax.set_aspect('equal')
     ax.set_title('DPD Particle Simulation')
 
+    # Create custom legend handles
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Fluid',
+               markerfacecolor=particle_colors[0], markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Wall',
+               markerfacecolor=particle_colors[1], markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Type A',
+               markerfacecolor=particle_colors[2], markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Type B',
+               markerfacecolor=particle_colors[3], markersize=10),
+    ]
+    # Add the legend to the axes
+    ax.legend(handles=legend_elements, loc='upper right', title='Particle Types')
+
     def update(frame):
         step = time_steps[frame]
         frame_data = df[df['Time'] == step]
@@ -99,12 +113,15 @@ def animate(df, file_name, file_path):
         ax.set_title(f"Time Step: {step}")
         return scat,
 
-    # === CREATE ANIMATION ===
+    # Create the animation
     ani = animation.FuncAnimation(fig, update, frames=len(time_steps), interval=1000/fps, blit=True)
 
-    # === SAVE TO MP4 ===
+    # Save the animation to mp4
     ani.save(output_video, writer='ffmpeg', fps=fps)
     print(f'Animation saved to {output_video}')
+
+    # Close the figure
+    plt.close(fig)
 
 
 def plot_all_csv_in_out_folder():
